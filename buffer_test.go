@@ -70,9 +70,7 @@ func TestBuffer_maxEntries(t *testing.T) {
 	b := buffer.New(
 		buffer.WithFlushHandler(flush),
 		buffer.WithErrorHandler(errors),
-		buffer.WithLimits(buffer.Limits{
-			MaxEntries: 3,
-		}),
+		buffer.WithMaxEntries(3),
 	)
 
 	b.Push("hello")
@@ -107,10 +105,8 @@ func TestBuffer_flushInterval(t *testing.T) {
 	b := buffer.New(
 		buffer.WithFlushHandler(flush),
 		buffer.WithErrorHandler(errors),
-		buffer.WithLimits(buffer.Limits{
-			MaxEntries:    100,
-			FlushInterval: time.Millisecond * 50,
-		}),
+		buffer.WithMaxEntries(100),
+		buffer.WithFlushInterval(time.Millisecond*50),
 	)
 
 	b.Push("hello")
@@ -241,10 +237,7 @@ func TestBuffer_flushErrors(t *testing.T) {
 // Benchmark pushing.
 func BenchmarkPush(b *testing.B) {
 	buf := buffer.New(
-		buffer.WithLimits(buffer.Limits{
-			MaxEntries:    250,
-			FlushInterval: time.Second,
-		}),
+		buffer.WithMaxEntries(250),
 	)
 
 	b.ResetTimer()

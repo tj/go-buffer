@@ -21,28 +21,17 @@ type temporary interface {
 	Temporary() bool
 }
 
-// DefaultLimits is the set of default limits used for flushing.
-var DefaultLimits = Limits{
-	MaxEntries:    250,
-	MaxRetries:    3,
-	FlushInterval: time.Second * 5,
-	FlushTimeout:  time.Second * 15,
-}
+// DefaultMaxEntries is the default max entries limit.
+var DefaultMaxEntries = 250
 
-// Limits configuration.
-type Limits struct {
-	// MaxEntries is the maximum number of entries before the buffer is flushed.
-	MaxEntries int
+// DefaultMaxRetries is the default max retries limit.
+var DefaultMaxRetries = 3
 
-	// MaxRetries is the maximum number of retries to perform on temporary errors.
-	MaxRetries int
+// DefaultFlushInterval is the default flush interval.
+var DefaultFlushInterval = time.Second * 5
 
-	// FlushInterval is the interval used to periodically flush the entries. Zero disables this feature.
-	FlushInterval time.Duration
-
-	// FlushTimeout is the timeout used in the context for flushing entries.
-	FlushTimeout time.Duration
-}
+// DefaultFlushTimeout is the default flush timeout.
+var DefaultFlushTimeout = time.Second * 15
 
 // FlushFunc is the flush callback function used to flush entries.
 type FlushFunc func(context.Context, []interface{}) error
@@ -57,51 +46,83 @@ type Option func(*Buffer)
 // New buffer with the given options.
 func New(options ...Option) *Buffer {
 	var v Buffer
-	v.limits = DefaultLimits
 	v.handleFlush = noopFlush
 	v.handleError = noopError
+	v.maxEntries = DefaultMaxEntries
+	v.maxRetries = DefaultMaxRetries
+	v.flushInterval = DefaultFlushInterval
+	v.flushTimeout = DefaultFlushTimeout
 
 	for _, o := range options {
 		o(&v)
 	}
 
 	v.done = make(chan struct{})
-	if v.limits.FlushInterval > 0 {
+	if v.flushInterval > 0 {
 		go v.intervalFlush()
 	}
 
 	return &v
 }
 
-// WithFlushHandler registers the function handling flushes.
+// WithFlushHandler sets the function handling flushes.
 func WithFlushHandler(fn FlushFunc) Option {
 	return func(v *Buffer) {
 		v.handleFlush = fn
 	}
 }
 
-// WithErrorHandler registers the function handling errors.
+// WithErrorHandler sets the function handling errors.
 func WithErrorHandler(fn ErrorFunc) Option {
 	return func(v *Buffer) {
 		v.handleError = fn
 	}
 }
 
-// WithLimits sets the limits used for flushing.
-func WithLimits(limits Limits) Option {
+// WithMaxEntries sets the maximum number of entries before flushing.
+func WithMaxEntries(n int) Option {
 	return func(v *Buffer) {
-		v.limits = limits
+		v.maxEntries = n
+	}
+}
+
+// WithMaxRetries sets the maximum number of retries for temporary flush errors.
+func WithMaxRetries(n int) Option {
+	return func(v *Buffer) {
+		v.maxRetries = n
+	}
+}
+
+// WithFlushInterval sets the interval at which events are periodically flushed.
+func WithFlushInterval(d time.Duration) Option {
+	return func(v *Buffer) {
+		v.flushInterval = d
+	}
+}
+
+// WithFlushTimeout sets the flush timeout.
+func WithFlushTimeout(d time.Duration) Option {
+	return func(v *Buffer) {
+		v.flushTimeout = d
 	}
 }
 
 // Buffer is used to batch entries.
 type Buffer struct {
-	handleFlush    FlushFunc
-	handleError    ErrorFunc
-	limits         Limits
 	pendingFlushes sync.WaitGroup
 	done           chan struct{}
 
+	// callbacks
+	handleFlush FlushFunc
+	handleError ErrorFunc
+
+	// limits
+	maxEntries    int
+	maxRetries    int
+	flushInterval time.Duration
+	flushTimeout  time.Duration
+
+	// buffer
 	mu     sync.Mutex
 	values []interface{}
 }
@@ -113,7 +134,7 @@ func (b *Buffer) Push(value interface{}) {
 
 	b.values = append(b.values, value)
 
-	if len(b.values) >= b.limits.MaxEntries {
+	if len(b.values) >= b.maxEntries {
 		b.flush()
 	}
 }
@@ -137,7 +158,7 @@ func (b *Buffer) Close() {
 
 // intervalFlush starts a loop flushing at the FlushInterval.
 func (b *Buffer) intervalFlush() {
-	tick := time.NewTicker(b.limits.FlushInterval)
+	tick := time.NewTicker(b.flushInterval)
 	for {
 		select {
 		case <-tick.C:
@@ -171,7 +192,7 @@ func (b *Buffer) doFlush(values []interface{}) {
 	var retries int
 
 retry:
-	ctx, cancel := context.WithTimeout(context.Background(), b.limits.FlushTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), b.flushTimeout)
 
 	err := b.handleFlush(ctx, values)
 	cancel()
@@ -181,10 +202,10 @@ retry:
 		logs.Printf("temporary error flushing %d entries: %v", len(values), e)
 		time.Sleep(time.Second) // TODO: backoff
 		retries++
-		if retries < b.limits.MaxRetries {
+		if retries < b.maxRetries {
 			goto retry
 		}
-		logs.Printf("max retries of %d exceeded", b.limits.MaxRetries)
+		logs.Printf("max retries of %d exceeded", b.maxRetries)
 	}
 
 	if err != nil {
