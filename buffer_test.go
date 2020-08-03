@@ -13,7 +13,7 @@ import (
 )
 
 // Test forced flush.
-func TestBuffer_flush(t *testing.T) {
+func TestBuffer_Flush(t *testing.T) {
 	var mu sync.Mutex
 	var flushes int
 	var flushed []interface{}
@@ -39,6 +39,43 @@ func TestBuffer_flush(t *testing.T) {
 	b.Push(" ")
 
 	b.Flush()
+
+	b.Push("world")
+	b.Push("!")
+
+	b.Close()
+
+	assert.Equal(t, 2, flushes, "flush count")
+	assert.Len(t, flushed, 4)
+}
+
+// Test sync forced flush.
+func TestBuffer_FlushSync(t *testing.T) {
+	var mu sync.Mutex
+	var flushes int
+	var flushed []interface{}
+
+	flush := func(ctx context.Context, values []interface{}) error {
+		mu.Lock()
+		defer mu.Unlock()
+		flushes++
+		flushed = append(flushed, values...)
+		return nil
+	}
+
+	errors := func(err error) {
+		assert.NoError(t, err)
+	}
+
+	b := buffer.New(
+		buffer.WithFlushHandler(flush),
+		buffer.WithErrorHandler(errors),
+	)
+
+	b.Push("hello")
+	b.Push(" ")
+
+	b.FlushSync()
 
 	b.Push("world")
 	b.Push("!")

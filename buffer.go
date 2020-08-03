@@ -139,12 +139,21 @@ func (b *Buffer) Push(value interface{}) {
 	}
 }
 
-// Flush flushes any pending entries.
+// Flush flushes any pending entries asynchronously.
 func (b *Buffer) Flush() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.flush()
+}
+
+// FlushSync flushes any pending entries synchronously.
+func (b *Buffer) FlushSync() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.doFlush(b.values)
+	b.values = nil
 }
 
 // Close flushes any pending entries, and waits for flushing to complete. This
