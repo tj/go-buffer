@@ -28,7 +28,7 @@ var DefaultMaxEntries = 250
 var DefaultMaxRetries = 3
 
 // DefaultFlushInterval is the default flush interval.
-var DefaultFlushInterval = time.Second * 5
+var DefaultFlushInterval = time.Second * 30
 
 // DefaultFlushTimeout is the default flush timeout.
 var DefaultFlushTimeout = time.Second * 15
